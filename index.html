@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고등학교 교과목 Q&A</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 min-h-screen py-8 px-4">
+    <div class="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-8 px-6 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-2">📚 고등학교 교과목 Q&A</h1>
+            <p class="text-indigo-100 text-lg">궁금한 교과목에 대해 질문하고 답변해보세요</p>
+        </header>
+
+        <!-- Subject Tabs -->
+        <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <div class="flex flex-wrap gap-3 justify-center">
+                <button class="subject-tab px-6 py-3 rounded-xl font-semibold text-base transition-all duration-300 transform hover:scale-105 active" data-subject="korean">
+                    📖 국어
+                </button>
+                <button class="subject-tab px-6 py-3 rounded-xl font-semibold text-base transition-all duration-300 transform hover:scale-105" data-subject="english">
+                    🔤 영어
+                </button>
+                <button class="subject-tab px-6 py-3 rounded-xl font-semibold text-base transition-all duration-300 transform hover:scale-105" data-subject="math">
+                    📐 수학
+                </button>
+                <button class="subject-tab px-6 py-3 rounded-xl font-semibold text-base transition-all duration-300 transform hover:scale-105" data-subject="science">
+                    🔬 과학
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <!-- 질문 목록 뷰 -->
+            <div id="list-view" class="view">
+                <!-- 질문 작성 섹션 -->
+                <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 mb-6 border border-indigo-100">
+                    <h2 class="text-2xl font-bold text-indigo-700 mb-4">새 질문 작성</h2>
+                    <form id="question-form" class="space-y-4">
+                        <input 
+                            type="text" 
+                            id="question-title" 
+                            placeholder="질문 제목을 입력하세요" 
+                            required
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                        >
+                        <textarea 
+                            id="question-content" 
+                            placeholder="질문 내용을 입력하세요" 
+                            rows="4" 
+                            required
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all resize-none"
+                        ></textarea>
+                        <button 
+                            type="submit" 
+                            class="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                        >
+                            ✏️ 질문 등록
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 질문 목록 -->
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">질문 목록</h2>
+                    <div id="questions-container" class="space-y-4">
+                        <!-- 질문들이 여기에 동적으로 추가됩니다 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 질문 상세 뷰 -->
+            <div id="detail-view" class="view hidden">
+                <button id="back-btn" class="mb-4 px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-xl transition-all duration-300 transform hover:scale-105">
+                    ← 목록으로
+                </button>
+                <div id="question-detail" class="question-detail">
+                    <!-- 질문 상세 내용이 여기에 표시됩니다 -->
+                </div>
+            </div>
+
+            <!-- 빈 상태 -->
+            <div id="empty-state" class="hidden text-center py-16 bg-gray-50 rounded-2xl">
+                <p class="text-gray-500 text-xl">아직 질문이 없습니다. 첫 번째 질문을 작성해보세요! ✨</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

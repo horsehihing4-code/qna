@@ -8,6 +8,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Firebase SDK (compat 버전 사용) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Firebase 설정 -->
+    <script src="firebase-config.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 min-h-screen py-8 px-4">
@@ -43,20 +48,32 @@
                 <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 mb-6 border border-indigo-100">
                     <h2 class="text-2xl font-bold text-indigo-700 mb-4">새 질문 작성</h2>
                     <form id="question-form" class="space-y-4">
-                        <input 
-                            type="text" 
-                            id="question-title" 
-                            placeholder="질문 제목을 입력하세요" 
-                            required
-                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                        >
-                        <textarea 
-                            id="question-content" 
-                            placeholder="질문 내용을 입력하세요" 
-                            rows="4" 
-                            required
-                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all resize-none"
-                        ></textarea>
+                        <div>
+                            <input 
+                                type="text" 
+                                id="question-title" 
+                                placeholder="질문 제목을 입력하세요 (최대 200자)" 
+                                required
+                                maxlength="200"
+                                class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                            >
+                            <p class="text-sm text-gray-500 mt-1 text-right">
+                                <span id="title-count">0</span>/200자
+                            </p>
+                        </div>
+                        <div>
+                            <textarea 
+                                id="question-content" 
+                                placeholder="질문 내용을 입력하세요 (최대 5000자)" 
+                                rows="4" 
+                                required
+                                maxlength="5000"
+                                class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all resize-none"
+                            ></textarea>
+                            <p class="text-sm text-gray-500 mt-1 text-right">
+                                <span id="content-count">0</span>/5000자
+                            </p>
+                        </div>
                         <button 
                             type="submit" 
                             class="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"

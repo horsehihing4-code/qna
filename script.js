@@ -146,10 +146,15 @@ async function saveAnswerToFirestore(questionId, answer) {
         if (questionSnap.exists) {
             const questionData = questionSnap.data();
             const answers = questionData.answers || [];
+            
+            // serverTimestamp()는 배열 내부에서 지원되지 않으므로
+            // 클라이언트에서 생성한 타임스탬프를 Timestamp 객체로 변환
+            const answerTimestamp = firebase.firestore.Timestamp.fromDate(new Date(answer.createdAt));
+            
             answers.push({
                 id: answer.id,
                 content: answer.content,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                createdAt: answerTimestamp
             });
             
             await questionRef.update({

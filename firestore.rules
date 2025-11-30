@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // questions 컬렉션 규칙
+    match /questions/{subjectId}/items/{questionId} {
+      // ✅ 모든 사용자가 읽기 가능
+      allow read: if true;
+      
+      // ✅ 누구나 질문 작성 가능 (데이터 검증 포함)
+      allow create: if request.resource.data.keys().hasAll(['title', 'content', 'createdAt', 'answers'])
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
+                    && request.resource.data.title.size() <= 200
+                    && request.resource.data.content is string
+                    && request.resource.data.content.size() > 0
+                    && request.resource.data.content.size() <= 5000
+                    && request.resource.data.answers is list;
+      
+      // ✅ 누구나 답변 추가 가능 (답변만 추가, 기존 데이터 수정 불가)
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answers'])
+                     && request.resource.data.answers.size() > resource.data.answers.size()
+                     // 답변 데이터 검증
+                     && request.resource.data.answers[request.resource.data.answers.size() - 1].keys().hasAll(['id', 'content', 'createdAt'])
+                     && request.resource.data.answers[request.resource.data.answers.size() - 1].content is string
+                     && request.resource.data.answers[request.resource.data.answers.size() - 1].content.size() > 0
+                     && request.resource.data.answers[request.resource.data.answers.size() - 1].content.size() <= 5000;
+      
+      // ❌ 삭제는 허용하지 않음 (악의적인 삭제 방지)
+      allow delete: if false;
+    }
+  }
+}

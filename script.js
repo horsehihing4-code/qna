@@ -1,3 +1,37 @@
+// Firebase 초기화 (firebase-config.js가 먼저 로드되어야 함)
+let db = null;
+let firebaseReady = false;
+
+// Firebase 초기화 함수
+async function initializeFirebase() {
+    return new Promise((resolve, reject) => {
+        // Firebase SDK가 로드될 때까지 대기
+        const checkFirebase = setInterval(() => {
+            if (typeof firebase !== 'undefined' && firebaseConfig) {
+                clearInterval(checkFirebase);
+                
+                try {
+                    // Firebase 초기화
+                    firebase.initializeApp(firebaseConfig);
+                    db = firebase.firestore();
+                    firebaseReady = true;
+                    console.log('Firebase 초기화 완료');
+                    resolve();
+                } catch (error) {
+                    console.error('Firebase 초기화 오류:', error);
+                    reject(error);
+                }
+            }
+        }, 100);
+        
+        // 10초 후 타임아웃
+        setTimeout(() => {
+            clearInterval(checkFirebase);
+            reject(new Error('Firebase SDK 로드 타임아웃'));
+        }, 10000);
+    });
+}
+
 // 데이터 저장소
 let data = {
     subjects: [
@@ -13,26 +47,168 @@ let data = {
 let currentSubject = 'korean';
 let currentQuestionId = null;
 
-// 로컬 스토리지에서 데이터 로드
-function loadData() {
-    const savedData = localStorage.getItem('qnaData');
-    if (savedData) {
-        const parsed = JSON.parse(savedData);
-        data.questions = parsed.questions || {};
-    }
-    // 각 교과목에 대한 질문 배열 초기화
-    data.subjects.forEach(subject => {
-        if (!data.questions[subject.id]) {
-            data.questions[subject.id] = [];
+// Firestore에서 데이터 로드
+async function loadData() {
+    try {
+        if (!firebaseReady) {
+            await initializeFirebase();
         }
-    });
+        
+        // 각 교과목의 질문 데이터 로드
+        for (const subject of data.subjects) {
+            const questionsRef = db.collection('questions').doc(subject.id).collection('items');
+            const querySnapshot = await questionsRef.orderBy('createdAt', 'desc').get();
+            
+            data.questions[subject.id] = [];
+            querySnapshot.forEach((docSnap) => {
+                const questionData = docSnap.data();
+                questionData.id = docSnap.id;
+                // Timestamp를 ISO 문자열로 변환
+                if (questionData.createdAt && questionData.createdAt.toDate) {
+                    questionData.createdAt = questionData.createdAt.toDate().toISOString();
+                }
+                // answers 배열의 createdAt도 변환
+                if (questionData.answers) {
+                    questionData.answers = questionData.answers.map(answer => {
+                        if (answer.createdAt && answer.createdAt.toDate) {
+                            answer.createdAt = answer.createdAt.toDate().toISOString();
+                        }
+                        return answer;
+                    });
+                }
+                data.questions[subject.id].push(questionData);
+            });
+        }
+        
+        console.log('Firebase에서 데이터 로드 완료');
+    } catch (error) {
+        console.error('데이터 로드 오류:', error);
+        // 오류 발생 시 빈 배열로 초기화
+        data.subjects.forEach(subject => {
+            if (!data.questions[subject.id]) {
+                data.questions[subject.id] = [];
+            }
+        });
+        
+        await Swal.fire({
+            icon: 'error',
+            title: '데이터 로드 실패',
+            text: 'Firebase 연결에 실패했습니다. firebase-config.js 파일을 확인해주세요.',
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
+        });
+    }
 }
 
-// 로컬 스토리지에 데이터 저장
-function saveData() {
-    localStorage.setItem('qnaData', JSON.stringify({
-        questions: data.questions
-    }));
+// 질문을 Firestore에 저장
+async function saveQuestionToFirestore(question) {
+    try {
+        if (!firebaseReady) {
+            await initializeFirebase();
+        }
+        
+        const questionRef = db.collection('questions').doc(currentSubject).collection('items').doc(question.id);
+        await questionRef.set({
+            title: question.title,
+            content: question.content,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            answers: question.answers || []
+        });
+        
+        // 로컬 데이터도 업데이트
+        if (!data.questions[currentSubject]) {
+            data.questions[currentSubject] = [];
+        }
+        const existingIndex = data.questions[currentSubject].findIndex(q => q.id === question.id);
+        if (existingIndex >= 0) {
+            data.questions[currentSubject][existingIndex] = question;
+        } else {
+            data.questions[currentSubject].push(question);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('질문 저장 오류:', error);
+        throw error;
+    }
+}
+
+// 답변을 Firestore에 저장
+async function saveAnswerToFirestore(questionId, answer) {
+    try {
+        if (!firebaseReady) {
+            await initializeFirebase();
+        }
+        
+        const questionRef = db.collection('questions').doc(currentSubject).collection('items').doc(questionId);
+        const questionSnap = await questionRef.get();
+        
+        if (questionSnap.exists) {
+            const questionData = questionSnap.data();
+            const answers = questionData.answers || [];
+            answers.push({
+                id: answer.id,
+                content: answer.content,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            await questionRef.update({
+                answers: answers
+            });
+            
+            // 로컬 데이터도 업데이트
+            const localQuestion = data.questions[currentSubject].find(q => q.id === questionId);
+            if (localQuestion) {
+                if (!localQuestion.answers) {
+                    localQuestion.answers = [];
+                }
+                localQuestion.answers.push(answer);
+            }
+            
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('답변 저장 오류:', error);
+        throw error;
+    }
+}
+
+// 실시간 업데이트 리스너 설정
+function setupRealtimeListeners() {
+    if (!firebaseReady) {
+        initializeFirebase().then(() => {
+            setupRealtimeListeners();
+        });
+        return;
+    }
+    
+    data.subjects.forEach(subject => {
+        const questionsRef = db.collection('questions').doc(subject.id).collection('items');
+        
+        questionsRef.orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+            if (subject.id === currentSubject) {
+                data.questions[subject.id] = [];
+                snapshot.forEach((docSnap) => {
+                    const questionData = docSnap.data();
+                    questionData.id = docSnap.id;
+                    if (questionData.createdAt && questionData.createdAt.toDate) {
+                        questionData.createdAt = questionData.createdAt.toDate().toISOString();
+                    }
+                    if (questionData.answers) {
+                        questionData.answers = questionData.answers.map(answer => {
+                            if (answer.createdAt && answer.createdAt.toDate) {
+                                answer.createdAt = answer.createdAt.toDate().toISOString();
+                            }
+                            return answer;
+                        });
+                    }
+                    data.questions[subject.id].push(questionData);
+                });
+                renderQuestions();
+            }
+        });
+    });
 }
 
 // DOM 요소
@@ -46,9 +222,47 @@ const backBtn = document.getElementById('back-btn');
 const questionDetail = document.getElementById('question-detail');
 
 // 초기화
-loadData();
-initSubjectTabs();
-renderQuestions();
+(async () => {
+    await loadData();
+    initSubjectTabs();
+    renderQuestions();
+    
+    // 실시간 업데이트 리스너 설정
+    setupRealtimeListeners();
+    
+    // 글자 수 카운터 설정
+    setupCharacterCounters();
+})();
+
+// 글자 수 카운터 설정
+function setupCharacterCounters() {
+    const titleInput = document.getElementById('question-title');
+    const contentInput = document.getElementById('question-content');
+    const titleCount = document.getElementById('title-count');
+    const contentCount = document.getElementById('content-count');
+    
+    if (titleInput && titleCount) {
+        titleInput.addEventListener('input', () => {
+            titleCount.textContent = titleInput.value.length;
+            if (titleInput.value.length > 200) {
+                titleCount.classList.add('text-red-500', 'font-bold');
+            } else {
+                titleCount.classList.remove('text-red-500', 'font-bold');
+            }
+        });
+    }
+    
+    if (contentInput && contentCount) {
+        contentInput.addEventListener('input', () => {
+            contentCount.textContent = contentInput.value.length;
+            if (contentInput.value.length > 5000) {
+                contentCount.classList.add('text-red-500', 'font-bold');
+            } else {
+                contentCount.classList.remove('text-red-500', 'font-bold');
+            }
+        });
+    }
+}
 
 // 교과목 탭 초기화
 function initSubjectTabs() {
@@ -107,6 +321,7 @@ questionForm.addEventListener('submit', async (e) => {
     const title = document.getElementById('question-title').value.trim();
     const content = document.getElementById('question-content').value.trim();
 
+    // 입력 검증
     if (!title || !content) {
         await Swal.fire({
             icon: 'warning',
@@ -118,28 +333,78 @@ questionForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    const newQuestion = {
-        id: Date.now().toString(),
-        title: title,
-        content: content,
-        createdAt: new Date().toISOString(),
-        answers: []
-    };
+    // 제목 길이 검증 (보안 규칙과 일치)
+    if (title.length > 200) {
+        await Swal.fire({
+            icon: 'warning',
+            title: '제목 길이 초과',
+            text: '제목은 200자 이하여야 합니다. (현재: ' + title.length + '자)',
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
+        });
+        return;
+    }
 
-    data.questions[currentSubject].push(newQuestion);
-    saveData();
-    renderQuestions();
-    questionForm.reset();
+    // 내용 길이 검증 (보안 규칙과 일치)
+    if (content.length > 5000) {
+        await Swal.fire({
+            icon: 'warning',
+            title: '내용 길이 초과',
+            text: '내용은 5000자 이하여야 합니다. (현재: ' + content.length + '자)',
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
+        });
+        return;
+    }
 
-    await Swal.fire({
-        icon: 'success',
-        title: '질문 등록 완료!',
-        text: '질문이 성공적으로 등록되었습니다.',
-        confirmButtonColor: '#6366f1',
-        confirmButtonText: '확인',
-        timer: 2000,
-        timerProgressBar: true
-    });
+    try {
+        const questionId = Date.now().toString();
+        const newQuestion = {
+            id: questionId,
+            title: title,
+            content: content,
+            createdAt: new Date().toISOString(),
+            answers: []
+        };
+
+        await saveQuestionToFirestore(newQuestion);
+        renderQuestions();
+        questionForm.reset();
+        
+        // 글자 수 카운터 리셋
+        const titleCount = document.getElementById('title-count');
+        const contentCount = document.getElementById('content-count');
+        if (titleCount) titleCount.textContent = '0';
+        if (contentCount) contentCount.textContent = '0';
+
+        await Swal.fire({
+            icon: 'success',
+            title: '질문 등록 완료!',
+            text: '질문이 성공적으로 등록되었습니다.',
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인',
+            timer: 2000,
+            timerProgressBar: true
+        });
+    } catch (error) {
+        console.error('질문 등록 오류:', error);
+        let errorMessage = '질문 등록 중 오류가 발생했습니다.';
+        
+        // Firestore 오류 메시지 처리
+        if (error.code === 'permission-denied') {
+            errorMessage = '권한이 없습니다. Firestore 보안 규칙을 확인해주세요.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        await Swal.fire({
+            icon: 'error',
+            title: '등록 실패',
+            text: errorMessage,
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
+        });
+    }
 });
 
 // 질문 목록 렌더링
@@ -301,25 +566,32 @@ function renderQuestionDetail(questionId) {
 
 // 답변 추가
 async function addAnswer(questionId, content) {
-    const questions = data.questions[currentSubject];
-    const question = questions.find(q => q.id === questionId);
-    
-    if (question) {
-        if (!question.answers) {
-            question.answers = [];
-        }
-        
+    // 답변 내용 길이 검증
+    if (content.length > 5000) {
+        await Swal.fire({
+            icon: 'warning',
+            title: '답변 길이 초과',
+            text: '답변은 5000자 이하여야 합니다. (현재: ' + content.length + '자)',
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
+        });
+        return;
+    }
+
+    try {
         const newAnswer = {
             id: Date.now().toString(),
             content: content,
             createdAt: new Date().toISOString()
         };
         
-        question.answers.push(newAnswer);
-        saveData();
+        await saveAnswerToFirestore(questionId, newAnswer);
         
         // 답변 목록 업데이트
-        renderAnswers(question.answers);
+        const question = data.questions[currentSubject].find(q => q.id === questionId);
+        if (question) {
+            renderAnswers(question.answers || []);
+        }
         
         // 질문 목록도 업데이트 (답변 개수 반영)
         renderQuestions();
@@ -333,6 +605,24 @@ async function addAnswer(questionId, content) {
             confirmButtonText: '확인',
             timer: 2000,
             timerProgressBar: true
+        });
+    } catch (error) {
+        console.error('답변 등록 오류:', error);
+        let errorMessage = '답변 등록 중 오류가 발생했습니다.';
+        
+        // Firestore 오류 메시지 처리
+        if (error.code === 'permission-denied') {
+            errorMessage = '권한이 없습니다. Firestore 보안 규칙을 확인해주세요.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        await Swal.fire({
+            icon: 'error',
+            title: '등록 실패',
+            text: errorMessage,
+            confirmButtonColor: '#6366f1',
+            confirmButtonText: '확인'
         });
     }
 }
